@@ -1,0 +1,29 @@
+{
+  "name": "pandoracampus-downloader",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "login": "ts-node src/index.ts",
+    "check": "ts-node src/check-downloads.ts",
+    "merge": "ts-node src/merge-chapters.ts",
+    "retry": "ts-node src/retry.ts",
+    "cleanup": "ts-node src/cleanup-files.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^20.19.23",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "puppeteer": "^24.25.0"
+  }
+}
