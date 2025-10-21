@@ -526,8 +526,43 @@ async function extractAndGeneratePDF(
     // Get only essential computed styles to avoid conflicts
     const computedStyles = getEssentialStyles(element);
 
+    // Clone the element to avoid modifying the original DOM
+    const clonedElement = element.cloneNode(true) as Element;
+    
+    // Process glossary-popup elements: replace with plain text content
+    const glossaryPopups = clonedElement.querySelectorAll('.glossary-popup, [class*="glossary-popup"]');
+    glossaryPopups.forEach((popup) => {
+      // Extract the text content (removing button and other elements)
+      const textContent = popup.textContent?.replace(/Vai al Glossario/g, '').trim() || '';
+      if (textContent) {
+        // Create a simple text node to replace the glossary popup
+        const textNode = document.createTextNode(textContent);
+        popup.parentNode?.replaceChild(textNode, popup);
+      } else {
+        // If no text content, just remove the element
+        popup.remove();
+      }
+    });
+    
+    // Remove mask elements completely (they create spacing issues)
+    const maskElements = clonedElement.querySelectorAll(
+      '.mask, [class*="mask"], [id*="mask-"], [id*="complement-"], .glossa, [class*="glossa"]'
+    );
+    maskElements.forEach((mask) => {
+      mask.remove();
+    });
+    
+    // Remove any empty elements that might cause spacing issues
+    const emptyElements = clonedElement.querySelectorAll('div:empty, span:empty, p:empty');
+    emptyElements.forEach((empty) => {
+      // Only remove if it has no meaningful attributes and no siblings with content
+      if (!empty.hasAttributes() || (empty.attributes.length === 1 && empty.className)) {
+        empty.remove();
+      }
+    });
+
     return {
-      html: element.outerHTML,
+      html: clonedElement.outerHTML,
       styles: allStyles,
       computedStyles: computedStyles,
       title: document.title || "Pandora Campus Page",
@@ -617,15 +652,45 @@ async function extractAndGeneratePDF(
             display: none !important;
           }
           
-          /* Hide post-it notes and glosses */
+          /* Hide post-it notes and glosses (backup CSS in case HTML preprocessing missed any) */
           .mask,
           .glossa,
           [class*="mask"],
           [class*="glossa"],
           [id*="mask-"],
-          [id*="complement-"] {
+          [id*="complement-"],
+          .glossary-popup,
+          [class*="glossary-popup"] {
             display: none !important;
             visibility: hidden !important;
+          }
+          
+          /* Prevent spacing issues from removed elements */
+          #selectableArea {
+            line-height: 1.6 !important;
+          }
+          
+          /* Ensure proper text flow and remove excessive spacing */
+          #selectableArea p {
+            margin-bottom: 1em !important;
+            margin-top: 0 !important;
+          }
+          
+          #selectableArea p:last-child {
+            margin-bottom: 0 !important;
+          }
+          
+          /* Remove excessive spacing from divs that might have contained removed elements */
+          #selectableArea div:empty {
+            display: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 0 !important;
+          }
+          
+          /* Normalize spacing for spans and inline elements */
+          #selectableArea span:empty {
+            display: none !important;
           }
           
           /* Force colors and backgrounds in print/PDF */
