@@ -48,6 +48,14 @@ This will:
 - Create a structured directory in `downloads/`
 - Generate metadata files for tracking
 
+To download a specific book (or if your library shows no books), pass the book's reader link:
+
+```bash
+npm run dev -- "https://www.pandoracampus.it/doi/10.978.8815/415073/_11_9"
+```
+
+This skips the books library and opens the book directly.
+
 **Output Structure:**
 
 ```

@@ -51,71 +51,54 @@ export async function mergeChapterPDFs(bookDir: string): Promise<void> {
     await mergeChapterPages(bookDir, processedDir, chapter);
   }
 
+  // Merge every page into a single PDF for the whole book
+  await mergeChapterPages(bookDir, processedDir, {
+    chapterNumber: 0,
+    title: "full_book",
+    startPage: 1,
+    endPage: metadata.tableOfContents.length,
+    pages: metadata.tableOfContents,
+  });
+
   console.log(`✓ Chapter merging completed! Files saved in: ${processedDir}`);
+}
+
+// Docbook IDs look like "_11_405": the first number identifies the chapter
+// (document) the page belongs to, so it changes exactly at chapter boundaries
+function getChapterKey(docbookId: string): string {
+  const match = docbookId.match(/^_?(\d+)_/);
+  return match ? match[1] : docbookId;
 }
 
 function identifyChapters(tocItems: TocItem[]): Chapter[] {
   const chapters: Chapter[] = [];
   let currentChapter: Chapter | null = null;
+  let currentKey: string | null = null;
   let chapterNumber = 0;
 
-  for (let i = 0; i < tocItems.length; i++) {
-    const item = tocItems[i];
-    const title = item.title;
-    const titleLower = title.toLowerCase();
+  for (const item of tocItems) {
+    const key = getChapterKey(item.docbookId);
 
-    // Check if this is "Premessa" - handle as standalone
-    if (titleLower.includes("premessa")) {
-      // Save previous chapter if exists
-      if (currentChapter) {
-        currentChapter.endPage = item.pageNum - 1;
-        chapters.push(currentChapter);
-      }
-
-      // Create standalone Premessa
-      chapters.push({
-        chapterNumber: 0, // Special number for Premessa
-        title: item.title,
-        startPage: item.pageNum,
-        endPage: item.pageNum,
-        pages: [item],
-      });
-
-      currentChapter = null;
+    if (currentChapter && key === currentKey) {
+      // Same document: section or sub-section of the current chapter
+      currentChapter.pages.push(item);
+      currentChapter.endPage = item.pageNum;
       continue;
     }
 
-    // Check if this is a chapter start (Capitolo X)
-    const isChapterStart = title.match(/^Capitolo\s+\d+/i);
+    // New document starts: numbered ones ("Capitolo 1 ...", "1 Introduzione")
+    // are chapters, the rest (Premessa, Conclusioni, ...) are standalone parts
+    const isChapter = /^(capitolo\s+)?\d+\s/i.test(item.title);
+    if (isChapter) chapterNumber++;
 
-    if (isChapterStart) {
-      // Save previous chapter if exists
-      if (currentChapter) {
-        currentChapter.endPage = item.pageNum - 1;
-        chapters.push(currentChapter);
-      }
-
-      // Start new chapter
-      chapterNumber++;
-      currentChapter = {
-        chapterNumber: chapterNumber,
-        title: item.title,
-        startPage: item.pageNum,
-        endPage: tocItems.length, // Will be updated when next chapter starts
-        pages: [item],
-      };
-    } else if (currentChapter) {
-      // Add to current chapter (numbered sections, sub-sections, etc.)
-      currentChapter.pages.push(item);
-    } else {
-      // No chapter started yet and not a chapter/premessa, skip or create default
-      console.warn(`⚠️ Orphaned content before first chapter: "${item.title}"`);
-    }
-  }
-
-  // Add the last chapter
-  if (currentChapter) {
-    currentChapter.endPage = tocItems[tocItems.length - 1].pageNum;
+    currentChapter = {
+      chapterNumber: isChapter ? chapterNumber : 0,
+      title: item.title,
+      startPage: item.pageNum,
+      endPage: item.pageNum,
+      pages: [item],
+    };
+    currentKey = key;
     chapters.push(currentChapter);
   }
 
@@ -171,8 +154,8 @@ async function mergeChapterPages(
     let outputFileName: string;
 
     if (chapter.chapterNumber === 0) {
-      // Special handling for Premessa
-      outputFileName = "premessa.pdf";
+      // Standalone parts are named after their title (e.g. premessa.pdf)
+      outputFileName = `${sanitizeFileName(chapter.title)}.pdf`;
     } else {
       // Generate descriptive filename for chapters
       const chapterTitle = sanitizeFileName(chapter.title);

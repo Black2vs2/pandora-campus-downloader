@@ -94,30 +94,40 @@ async function loginToPandoraCampus(): Promise<{ browser: any; page: any }> {
 
 async function navigateToMyBooksAndRead(
   page: any,
-  specificDocbookIds?: string[]
+  specificDocbookIds?: string[],
+  bookUrl?: string
 ): Promise<void> {
   try {
-    console.log("Navigating to My Books page...");
+    if (bookUrl) {
+      // Open the book directly, skipping the My Books page
+      console.log("Opening book link:", bookUrl);
+      await page.goto(bookUrl, { waitUntil: "domcontentloaded" });
+    } else {
+      console.log("Navigating to My Books page...");
 
-    // Navigate to the mybooks page
-    await page.goto("https://www.pandoracampus.it/pandora/mybooks", {
-      waitUntil: "domcontentloaded",
-    });
+      // Navigate to the mybooks page
+      await page.goto("https://www.pandoracampus.it/pandora/mybooks", {
+        waitUntil: "domcontentloaded",
+      });
 
-    // Wait additional 2 seconds for content to fully load
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait additional 2 seconds for content to fully load
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    console.log('Looking for first "Leggi" button...');
+      console.log('Looking for first "Leggi" button...');
 
-    // Wait for and click the first "Leggi" button
-    const readButton = await page.waitForSelector("a.btn.read", {
-      timeout: 15000,
-    });
-    if (readButton) {
+      // Wait for the first "Leggi" button, without crashing if there is none
+      const readButton = await page
+        .waitForSelector("a.btn.read", { timeout: 15000 })
+        .catch(() => null);
+      if (!readButton) {
+        throw new Error(
+          'No books found in My Books (no "Leggi" button). ' +
+            "Pass a book link instead: npm run dev -- <book-url>"
+        );
+      }
+
       console.log('Found "Leggi" button, clicking...');
       await readButton.click();
-    } else {
-      throw new Error('Could not find any "Leggi" button');
     }
 
     console.log("Waiting for reader page to load...");
@@ -205,6 +215,10 @@ async function navigateToMyBooksAndRead(
     // Download all pages as PDF
     if (bookData.docbookIds.length > 0) {
       await downloadPagesAsPDF(page, bookData.tocItems);
+    } else {
+      console.warn(
+        "⚠️ No chapters found in the reader. Check that the book link is correct."
+      );
     }
 
     return bookData;
@@ -237,7 +251,7 @@ export async function downloadPagesAsPDF(
       console.log("Current URL:", currentUrl);
 
       // Extract book number from URL pattern like: /doi/10.978.8815/415073/_11_9
-      const urlMatch = currentUrl.match(/\/doi\/([\d\.]+\/[\d]+)\//);
+      const urlMatch = currentUrl.match(/\/doi\/([\d\.]+\/[\d]+)/);
       if (!urlMatch) {
         throw new Error("Could not extract book number from URL");
       }
@@ -256,7 +270,7 @@ export async function downloadPagesAsPDF(
     // Generate metadata file
     const metadataPath = path.join(bookDir, "metadata.json");
     const metadata = {
-      bookNumber: bookNumber,
+      bookNumber: finalBookNumber,
       extractedAt: new Date().toISOString(),
       totalPages: tocItems.length,
       tableOfContents: tocItems,
@@ -913,13 +927,23 @@ export async function retryFailedDownloads(
 async function main(): Promise<void> {
   let browser: any = null;
 
+  // Optional book link, e.g. https://www.pandoracampus.it/doi/10.978.8815/415073/_11_9
+  const bookUrl = process.argv[2];
+  if (bookUrl && !/^https?:\/\/[^/]*pandoracampus\.it\/doi\//.test(bookUrl)) {
+    console.error(
+      `Invalid book link: ${bookUrl}\n` +
+        "Expected something like https://www.pandoracampus.it/doi/10.978.8815/415073/..."
+    );
+    process.exit(1);
+  }
+
   try {
     // Login first
     const { browser: loginBrowser, page } = await loginToPandoraCampus();
     browser = loginBrowser;
 
-    // After successful login, navigate to books and read first book
-    await navigateToMyBooksAndRead(page);
+    // After successful login, open the given book or the first one in My Books
+    await navigateToMyBooksAndRead(page, undefined, bookUrl);
   } catch (error) {
     console.error("Failed to execute automation:", error);
     process.exit(1);
